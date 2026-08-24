@@ -98,6 +98,13 @@ kathara connect s1
 Sostituire `s1` con il nome del nodo desiderato, ad esempio `h1`, `h2`,
 `h3`, `r1` o `ext1`.
 
+## Documentazione
+
+La documentazione completa del progetto, inclusi la descrizione della topologia,
+le modifiche effettuate, il funzionamento del controller Ryu e tutti i test
+eseguiti, è disponibile nel PDF:
+
+[Apri la documentazione completa](doc/PROGETTO_SDN.pdf)
 
 
 
