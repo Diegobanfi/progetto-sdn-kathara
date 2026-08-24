@@ -1,0 +1,7 @@
+# h2 — Web Server (10.0.0.20)
+ip addr add 10.0.0.20/24 dev eth0
+ip route add default via 10.0.0.1
+
+# Start a simple HTTP server on port 8080 (background)
+mkdir -p /var/www && echo "<h1>Welcome to h2 — ASDN Web Server</h1>" > /var/www/index.html
+cd /var/www && python3 -m http.server 8080 &

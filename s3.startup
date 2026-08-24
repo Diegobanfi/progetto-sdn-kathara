@@ -1,0 +1,23 @@
+# s3.startup
+#MGM eth2 → controller
+#avvio servizio OVS
+/etc/init.d/openvswitch-switch start
+
+#CREO BRIDGE SDN
+ovs-vsctl add-br s3
+
+#aggiungo le porte dati
+ovs-vsctl add-port s3 eth0
+ovs-vsctl add-port s3 eth1
+
+# === FONDAMENTALE: Accendiamo le interfacce su s3 ===
+ip link set eth0 up
+ip link set eth1 up
+
+#aggiungo interfaccia di MGMT
+ip addr add 172.16.0.30/24 dev eth2
+ip link set eth2 up #tiene interfaccia accesa
+
+ovs-vsctl set bridge s3 other-config:datapath-id=0000000000000003
+#connessione al controller
+ovs-vsctl set-controller s3 tcp:172.16.0.1:6653

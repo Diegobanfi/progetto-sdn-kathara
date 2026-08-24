@@ -1,0 +1,8 @@
+# controller — Ryu SDN Controller
+# Management interface on the MGMT collision domain
+ip addr add 172.16.0.1/24 dev eth0
+# Start Ryu with the Learning Switch controller
+
+
+# The .py file is at /ryu_campus.py because Kathara mounts the controller/ directory to /
+ryu-manager --ofp-tcp-listen-port 6653 /ryu_campus.py 

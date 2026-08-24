@@ -1,0 +1,21 @@
+# s2 — Access SDN Switch
+# Data ports: eth0 → s1 (trunk), eth1 → h2 (web), eth2 → h3 (db)
+# Management:  eth3 → controller (NOT added to the OVS bridge)
+
+/etc/init.d/openvswitch-switch start
+
+ovs-vsctl add-br s2
+
+ovs-vsctl add-port s2 eth0
+ovs-vsctl add-port s2 eth1
+ovs-vsctl add-port s2 eth2
+ovs-vsctl add-port s2 eth4  # OF Porta 4 (verso s3)
+
+#ip link set eth4 up
+# Management interface — gives s2 IP connectivity to the controller
+# This interface is NOT part of the OVS bridge (it's for control-plane only)
+ip addr add 172.16.0.20/24 dev eth3
+
+ovs-vsctl set bridge s2 other-config:datapath-id=0000000000000002
+# Connect to the Ryu controller on the management network
+ovs-vsctl set-controller s2 tcp:172.16.0.1:6653

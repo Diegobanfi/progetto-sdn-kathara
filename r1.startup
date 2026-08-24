@@ -1,0 +1,11 @@
+# r1 — Gateway Router
+# Bridges the external network (192.168.1.0/24) and internal SDN network (10.0.0.0/24)
+
+# External interface
+ip addr add 192.168.1.1/24 dev eth0
+
+# Internal interface (connects to SDN domain via s1)
+ip addr add 10.0.0.1/24 dev eth1
+
+# Enable IP forwarding so r1 acts as a router
+sysctl -w net.ipv4.ip_forward=1
