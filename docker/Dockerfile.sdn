@@ -1,0 +1,39 @@
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies and networking tools
+RUN apt-get update && apt-get install -y \
+    mininet \
+    openvswitch-switch \
+    openvswitch-common \
+    openvswitch-testcontroller \
+    iputils-ping \
+    net-tools \
+    iproute2 \
+    tcpdump \
+    tshark \
+    iperf \
+    python3 \
+    python3-pip \
+    curl \
+    nano \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Symlink test-controller so mininet's OVSController class finds it
+RUN ln -s /usr/bin/ovs-testcontroller /usr/bin/ovs-controller
+
+# Fix for Ryu compatibility with newer eventlet packages
+RUN pip3 install --upgrade pip
+RUN pip3 install mininet networkx
+RUN pip3 install "eventlet<0.30"
+RUN pip3 install ryu
+
+# Create workspace directory
+WORKDIR /lab
+
+# Run a bash shell by default, start OpenvSwitch and the test controller.
+# The test controller is needed because Mininet's auto-launch of ovs-controller
+# fails on macOS Docker Desktop. Labs using Ryu will kill this process first.
+CMD service openvswitch-switch start && ovs-testcontroller ptcp:6653 &>/dev/null & /bin/bash
