@@ -32,7 +32,7 @@ STATIC_ROUTES = {
 
 #FASE5: Identifico porte inter-switch per evitare loop ARP sull'anello
 SWITCH_PORTS = {
-    DPID_S1: {1, 3, 4},   # porta1=r1, porta3=s2, porta4=s3
+    DPID_S1: {3, 4},       # porta3=s2, porta4=s3
     DPID_S2: {1, 4},       # porta1=s1, porta4=s3
     DPID_S3: {1, 2},       # porta1=s1, porta2=s2
 }
