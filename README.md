@@ -1,4 +1,4 @@
-# Progetto SDN: Topologia ad Anello e Politiche di Filtraggio
+# Progetto SDN: Topologia ad Anello e Politiche di Filtraggio in ambiente Katharà
 
 ## Autore
 Diego Banfi
