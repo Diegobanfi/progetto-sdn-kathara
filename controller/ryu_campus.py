@@ -5,15 +5,16 @@ from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet, ethernet, ipv4, arp
 
-#DEFINISCO IP PER TASK2
+#DEFINISCO IP PER TASK3
 IP_H1 = "10.0.0.10"
 IP_H2 = "10.0.0.20"
 
 #FASE1:IDENTIFICO SWITCH E HOST, DEFINISCO DPID E IP
-#DEFINISCO IP PER TASK3
+#DEFINISCO IP PER TASK2
 IP_H3 = "10.0.0.30"
 
 #DEFINISCO DPID SWITCH PER TASK3
+#ryu converte dpid in esadecimale a 16 cifre, quindi 1 diventa 0000000000000001 
 DPID_S1 = 1
 DPID_S2 = 2
 DPID_S3 = 3
@@ -30,9 +31,9 @@ STATIC_ROUTES = {
 }
 
 
-#FASE5: Identifico porte inter-switch per evitare loop ARP sull'anello
+#FASE5: Identifico porte inter-switch per controllare il flood di ARP
 SWITCH_PORTS = {
-    DPID_S1: {3, 4},       # porta3=s2, porta4=s3
+    DPID_S1: {3, 4},   # porta1=r1, porta3=s2, porta4=s3
     DPID_S2: {1, 4},       # porta1=s1, porta4=s3
     DPID_S3: {1, 2},       # porta1=s1, porta2=s2
 }
@@ -71,7 +72,7 @@ class RyuCampusController(app_manager.RyuApp): #SDN APPLICATION
 #FASE 3: INSTALLAZIONE PROATTIVA DELLE ROTTE STATICHE
 #funzione una sola volta,quando lo switch si connette al controller
 
-    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER) #DEFINISCO LE REGOLE PROATTIVE
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         ofproto  = datapath.ofproto
@@ -85,16 +86,17 @@ class RyuCampusController(app_manager.RyuApp): #SDN APPLICATION
         self._install_static_routes(datapath) #installa le rotte statiche proattive per il policy routing
         self.logger.info(">>> Switch connesso: dpid=%016x", datapath.id)
 
-#INSTALLAZIONE PROATTIVA ROUTE
+#INSTALLAZIONE PROATTIVA ROUTE PER POLICY ROUTING
     def _install_static_routes(self, datapath):
         parser = datapath.ofproto_parser
         dpid   = datapath.id #identifica lo switch corrente connesso al controller
-        for (sw_dpid, src_ip, dst_ip), out_port in STATIC_ROUTES.items(): #percorre tutte le rotte statiche definite
+        for (sw_dpid, src_ip, dst_ip), out_port in STATIC_ROUTES.items(): #ad ogni iterazione ottengo le info per costruire regola
             if sw_dpid != dpid:
-                continue
-            match   = parser.OFPMatch(eth_type=0x0800,ipv4_src=src_ip, ipv4_dst=dst_ip) #costo match identifica il traffico IP tra src e dst
-            actions = [parser.OFPActionOutput(out_port)] #inoltro pacchetti verso la porta specificata per quella rotta 
-            self._add_flow(datapath, priority=200, match=match, actions=actions) # aggiunge la regola al flusso dello switch corrente con priorità 200 
+                continue #se i valori sono diversi interrompo interazione e passo al ciclo successivo, altrimenti installo la regola di routing nello switch corrente
+                         #se si connette s1 salto le entry relative a s1 e s3
+            match   = parser.OFPMatch(eth_type=0x0800,ipv4_src=src_ip, ipv4_dst=dst_ip) #il match identidica i pacchetti che corrispondono alla flow rule
+            actions = [parser.OFPActionOutput(out_port)] # azione:inoltro pacchetti verso la porta specificata per quella rotta 
+            self._add_flow(datapath, priority=200, match=match, actions=actions) # installo flow rule,invio allo switch messagio OFPFlowMod
             self.logger.info("[dpid=%016x] ROUTE: %s→%s porta %s",dpid, src_ip, dst_ip, out_port)
 
 
@@ -143,6 +145,7 @@ class RyuCampusController(app_manager.RyuApp): #SDN APPLICATION
             dst_ip  = arp_pkt.dst_ip
 
             #serve al proxy arp in futuro
+            #AGGIORNO TABELLA ARP E TABELLA MAC LEARNING    
             self.arp_table[src_ip] = src_mac #memorizzo IP→MAC nella tabella ARP globale del controller
             self.mac_to_port[dpid][src_mac] = in_port #memorizzo la corrispondenza MAC→porta nella tabella mac_to_port
             self.logger.info("[dpid=%016x] ARP from %s(%s) porta %s",
@@ -150,7 +153,7 @@ class RyuCampusController(app_manager.RyuApp): #SDN APPLICATION
 
             #verifico se il pacchetto ARP è una richiesta 
             if arp_pkt.opcode == arp.ARP_REQUEST:
-                # CASO 1: PROXY ARP REPLY: QUANDO IL MAC è GIA NOTO risponde direttamente controller ryu
+                # CASO 1: PROXY ARP REPLY: SE CONOSCE GIA IL MAC
                 if dst_ip in self.arp_table:
                     reply_mac = self.arp_table[dst_ip]
                     self.logger.info(
