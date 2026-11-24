@@ -1,111 +1,164 @@
-# Progetto SDN: Topologia ad Anello e Politiche di Filtraggio in ambiente Katharà
+# SDN Ring Topology with Firewall and Policy Routing (Kathará + Ryu)
 
-## Autore
-Diego Banfi
+A Software-Defined Networking lab built with [Kathará](https://www.kathara.org/),
+Open vSwitch and a [Ryu](https://ryu-sdn.org/) OpenFlow 1.3 controller.
+Starting from a linear two-switch campus network, the project:
 
+1. closes a **physical ring** by adding a third switch (`s3`);
+2. enforces a **stateless L3 firewall** in the data plane (`h1` ↔ `h3` blocked);
+3. implements **asymmetric policy routing** over the ring (`h1 → h2` is detoured
+   through `s3`, the return path stays direct);
+4. keeps the loop harmless with **controlled ARP flooding** and **Proxy ARP**,
+   since a Layer-2 loop would otherwise cause a broadcast storm.
 
-## Setup
+Author: Diego Banfi — University of L'Aquila, DISIM (Dept. of Information
+Engineering, Computer Science and Mathematics), A.Y. 2025–2026.
+Supervisor: Prof. Carlo Centofanti.
 
-### Prerequisiti
+> The full write-up (design, code walkthrough, experimental validation) is in
+> [`docs/report/sdn_ring_report.pdf`](docs/report/sdn_ring_report.pdf).
 
-Sono necessari:
+## Topology
 
-- Docker.
-- Kathara.
-- Git.
-- Un sistema compatibile con Docker e Kathara.
+```mermaid
+graph LR
+    ext1["ext1<br/>192.168.1.100"] ---|F| r1["r1 (gateway)<br/>192.168.1.1 / 10.0.0.1"]
+    r1 ---|A| s1((s1 core))
+    s1 ---|B| h1["h1 workstation<br/>10.0.0.10"]
+    s1 ---|C| s2((s2 access))
+    s1 ---|G| s3((s3))
+    s2 ---|H| s3
+    s2 ---|D| h2["h2 web server<br/>10.0.0.20:8080"]
+    s2 ---|E| h3["h3 DB server<br/>10.0.0.30"]
+    ctrl["Ryu controller<br/>172.16.0.1:6653"] -.-|MGMT| s1
+    ctrl -.-|MGMT| s2
+    ctrl -.-|MGMT| s3
+```
 
+Solid lines are data-plane links, dotted lines the out-of-band management
+network. `G` and `H` are the two collision domains added to close the ring
+`s1 – s2 – s3 – s1`.
 
-## Descrizione del Progetto
-L'obiettivo di questo progetto è la modifica della topologia SDN fornita nel Lab 18, 
-passando da una struttura lineare a una **topologia ad anello** mediante l'aggiunta di un terzo switch (s3).
-Il progetto include l'implementazione di politiche di sicurezza (firewall) e l'instradamento di flussi specifici 
-sull'anello, gestendo le problematiche legate ai loop di livello 2.
+OpenFlow port numbers (assigned by Open vSwitch in the order the interfaces are
+added to each bridge — they are **not** the same as the `ethN` numbers):
 
-## Modifiche apportate
-- **Topologia:** Inserito switch `s3` connesso a `s1` e `s2`.
-- **Configurazione:** Aggiornato `lab.conf` e creato `s3.startup`.
-- **Controller:** Modificato `ryu_campus.py` per:
-  - Implementare il blocco del traffico tra [IP_SORGENTE] e [IP_DESTINAZIONE].
-  - Forzare il routing del traffico [TIPO_TRAFFICO] attraverso il nuovo nodo `s3`.
-    
-### Struttura del progetto
+| Switch | Port 1 | Port 2 | Port 3 | Port 4 |
+|--------|--------|--------|--------|--------|
+| `s1`   | r1     | h1     | s2     | s3     |
+| `s2`   | s1     | h2     | h3     | s3     |
+| `s3`   | s1     | s2     | –      | –      |
 
-La directory principale deve contenere il file `lab.conf`, i file `.startup`
-e la directory `docker/` con il Dockerfile del controller:
+## Implemented policies
+
+| Priority | Policy | Behaviour |
+|---------:|--------|-----------|
+| 300 | Firewall | All IPv4 traffic between `h1` (10.0.0.10) and `h3` (10.0.0.30) is dropped in both directions. The rule is installed reactively on the first offending packet; later packets are dropped by the switch itself. |
+| 200 | Policy routing | `h1 → h2` follows `h1 → s1 → s3 → s2 → h2`; `h2 → h1` follows `h2 → s2 → s1 → h1`. Flows are pushed proactively when each switch connects. |
+| 1 | MAC learning | Generic L2 learning switch for everything not covered above. |
+| 0 | Table-miss | Unmatched packets go to the controller. |
+
+Higher priority wins, so a security rule always overrides routing, and routing
+always overrides plain L2 forwarding.
+
+**Loop avoidance.** ARP requests entering from a host port are flooded once;
+requests relayed by another switch are delivered only to local host-facing
+ports. If the controller already knows the target MAC it answers itself
+(Proxy ARP), so no broadcast travels around the ring.
+
+## Repository layout
 
 ```text
 .
 ├── README.md
-├── lab.conf
 ├── docker/
-│   └── Dockerfile.sdn
-├── controller/
-├── s1.startup
-├── s2.startup
-├── s3.startup
-├── r1.startup
-├── h1.startup
-├── h2.startup
-├── h3.startup
-└── ext1.startup
+│   └── Dockerfile.sdn            # image for the Ryu controller node (asdn/sdn)
+├── lab/                          # the Kathará lab (run kathara commands here)
+│   ├── lab.conf                  # topology: nodes, interfaces, collision domains
+│   ├── controller.startup        # starts Ryu on TCP 6653
+│   ├── controller/
+│   │   └── ryu_campus.py         # OpenFlow 1.3 controller application
+│   ├── s1.startup  s2.startup  s3.startup   # Open vSwitch bridges
+│   ├── r1.startup                # gateway router
+│   └── h1.startup  h2.startup  h3.startup  ext1.startup
+└── docs/
+    ├── report/
+    │   ├── sdn_ring_report.pdf   # final report (English)
+    │   ├── report.tex            # LaTeX source
+    │   ├── figures/              # logos
+    │   └── screenshots/          # captured test output used in the report
+    └── report_it_original.pdf    # original Italian report (kept for reference)
 ```
 
-### Costruzione dell'immagine Docker
+## Prerequisites
 
-Dalla directory principale del progetto, eseguire:
+- [Docker](https://docs.docker.com/get-docker/)
+- [Kathará](https://github.com/KatharaFramework/Kathara) (provides `kathara`
+  and the `kathara/sdn` image used by the switches)
+- Git
+
+## Quick start
 
 ```bash
+git clone https://github.com/Diegobanfi/progetto-sdn-kathara.git
+cd progetto-sdn-kathara
+
+# 1. Build the controller image (once)
 docker build -t asdn/sdn -f docker/Dockerfile.sdn docker/
-```
 
-Il comando costruisce l'immagine `asdn/sdn`, utilizzata dal nodo
-controller definito in `lab.conf`.
-
-### Avvio della topologia
-
-Dopo aver costruito l'immagine, avviare tutti i nodi con:
-
-```bash
+# 2. Start the lab
+cd lab
 kathara lstart
-```
 
-Il comando avvia il controller Ryu, gli switch OpenFlow `s1`, `s2` e `s3`,
-il router `r1` e gli host della topologia.
-
-### Arresto della topologia
-
-Per arrestare e rimuovere i nodi del laboratorio:
-
-```bash
+# 3. Stop and remove everything when done
 kathara lclean
 ```
 
-### Verifica dei container
+`kathara lstart` starts the controller, `s1`–`s3`, `r1` and the hosts. Open a
+shell on any node with `kathara connect <node>` (e.g. `h1`, `s1`, `controller`).
 
-Per controllare i nodi attivi:
+## Verifying the behaviour
 
-```bash
-docker ps
-```
-
-Per accedere a un nodo:
+Run the commands in the indicated node. Details and captured output are in the
+report (Section 5).
 
 ```bash
-kathara connect s1
+# h1 -> h2 allowed (via s1 -> s3 -> s2)
+h1$ ping -c 4 10.0.0.20
+
+# Firewall: h1 <-> h3 blocked in both directions
+h1$ ping -c 4 -W 1 10.0.0.30
+h3$ ping -c 4 -W 1 10.0.0.10
+
+# h2 stays reachable from both
+h2$ ping -c 4 10.0.0.10 && ping -c 4 10.0.0.30
+
+# Flow tables: priority 200 = routing, priority 300 = firewall drop
+s1$ ovs-ofctl -O OpenFlow13 dump-flows s1     # same for s2, s3
+
+# External client reaches the web server through r1
+ext1$ curl http://10.0.0.20:8080
+ext1$ iperf3 -c 10.0.0.20        # start `iperf3 -s` on h2 first
+
+# Proxy ARP / controlled flooding: watch the controller log
+controller$ # ryu-manager output: "ARP from ...", "ARP PROXY REPLY ..."
 ```
 
-Sostituire `s1` con il nome del nodo desiderato, ad esempio `h1`, `h2`,
-`h3`, `r1` o `ext1`.
+Expected results: `h1 ↔ h2` and `h2 ↔ h3` succeed, `h1 ↔ h3` shows 100 % packet
+loss, `s3` has **no** flow for `10.0.0.20 → 10.0.0.10` (the return path does not
+cross it), and the ring causes no broadcast storm.
 
-## Documentazione
+## Known limitations
 
-La documentazione completa del progetto, inclusi la descrizione della topologia,
-le modifiche effettuate, il funzionamento del controller Ryu e tutti i test
-eseguiti, è disponibile nel PDF:
+- Port numbers in `STATIC_ROUTES` and `SWITCH_PORTS` are hard-coded for this
+  topology; adding nodes means updating them.
+- The firewall drop flows have no timeout and only the switch that first sees
+  the traffic gets the rule.
+- An ARP reply whose destination MAC is unknown falls back to `OFPP_FLOOD`,
+  which is not loop-filtered (it only happens if the requester was never
+  learned).
+- IPv6 is ignored.
 
-[Apri la documentazione completa](doc/PROGETTO_SDN.pdf)
+## License
 
-
-
-
+No license has been set yet; all rights reserved by the author unless stated
+otherwise.

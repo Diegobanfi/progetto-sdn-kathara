@@ -1,0 +1,22 @@
+# s3 - New SDN switch that closes the ring
+# Data ports: eth0 -> s1, eth1 -> s2
+# Management: eth2 -> controller (NOT added to the OVS bridge)
+
+/etc/init.d/openvswitch-switch start
+
+ovs-vsctl add-br s3
+
+ovs-vsctl add-port s3 eth0   # OF port 1 (to s1)
+ovs-vsctl add-port s3 eth1   # OF port 2 (to s2)
+
+# Bring the data interfaces up
+ip link set eth0 up
+ip link set eth1 up
+
+# Management interface
+ip addr add 172.16.0.30/24 dev eth2
+ip link set eth2 up
+
+ovs-vsctl set bridge s3 other-config:datapath-id=0000000000000003
+# Connect to the Ryu controller over the management network
+ovs-vsctl set-controller s3 tcp:172.16.0.1:6653
