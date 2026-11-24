@@ -1,4 +1,4 @@
-# h2 — Web Server (10.0.0.20)
+# h2 - Web server (10.0.0.20)
 ip addr add 10.0.0.20/24 dev eth0
 ip route add default via 10.0.0.1
 

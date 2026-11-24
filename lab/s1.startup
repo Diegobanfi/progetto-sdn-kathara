@@ -1,0 +1,21 @@
+# s1 - Core SDN switch
+# Data ports: eth0 -> r1 (uplink), eth1 -> h1, eth2 -> s2, eth4 -> s3
+# Management: eth3 -> controller (NOT added to the OVS bridge)
+
+/etc/init.d/openvswitch-switch start
+
+ovs-vsctl add-br s1
+
+# OpenFlow port numbers follow the order of the add-port commands
+ovs-vsctl add-port s1 eth0   # OF port 1 (to r1)
+ovs-vsctl add-port s1 eth1   # OF port 2 (to h1)
+ovs-vsctl add-port s1 eth2   # OF port 3 (to s2)
+ovs-vsctl add-port s1 eth4   # OF port 4 (to s3)
+
+# Management interface: IP connectivity to the controller.
+# Not part of the OVS bridge (control plane only).
+ip addr add 172.16.0.10/24 dev eth3
+
+ovs-vsctl set bridge s1 other-config:datapath-id=0000000000000001
+# Connect to the Ryu controller over the management network
+ovs-vsctl set-controller s1 tcp:172.16.0.1:6653

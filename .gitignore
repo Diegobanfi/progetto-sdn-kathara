@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.pyc
+# LaTeX build artefacts
+docs/report/*.aux
+docs/report/*.log
+docs/report/*.out
+docs/report/*.toc
+docs/report/*.synctex.gz

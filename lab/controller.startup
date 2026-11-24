@@ -1,0 +1,8 @@
+# controller - Ryu SDN controller
+# Management interface on the MGMT collision domain
+ip addr add 172.16.0.1/24 dev eth0
+
+# Start Ryu on the OpenFlow port 6653.
+# Kathara copies the controller/ directory of the lab into the node's root
+# filesystem, so the application is available as /ryu_campus.py.
+ryu-manager --ofp-tcp-listen-port 6653 /ryu_campus.py
